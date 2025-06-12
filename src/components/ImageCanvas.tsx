@@ -1,23 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Stage, Layer, Image as KonvaImage, Transformer } from 'react-konva';
 import Konva from 'konva';
+import { useDropzone } from 'react-dropzone';
+import { Button } from '~/components/ui/button';
+// import { Label } from '~/components/ui/label'; // Not used yet
 
 interface ImageCanvasProps {
-  userImageDataUrl: string | null;
+  userImageDataUrl: string | null; // Prop to initialize or externally set/clear the image
   width: number;
   height: number;
   overlayImageUrl?: string;
   onStageRef?: (stage: Konva.Stage | null) => void;
+  onImageUpdate?: (imageDataUrl: string | null) => void; // Callback for parent
 }
 
 const ImageCanvas: React.FC<ImageCanvasProps> = ({
   userImageDataUrl,
   width,
   height,
-  overlayImageUrl = '/overlay.png',
+  overlayImageUrl = '/pepe-loves-overlay.webp', // Updated default
   onStageRef,
+  onImageUpdate,
 }) => {
   const [userImage, setUserImage] = useState<HTMLImageElement | null>(null);
+  const [showUploadButton, setShowUploadButton] = useState(true); // Added state
   const [overlayImage, setOverlayImage] = useState<HTMLImageElement | null>(null);
   const [overlayError, setOverlayError] = useState<string | null>(null);
 
@@ -25,12 +31,13 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
   const overlayImageRef = useRef<Konva.Image>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
   const stageRef = useRef<Konva.Stage>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null); // Added ref
 
   const [userImageProps, setUserImageProps] = useState({
-    x: 50,
-    y: 50,
-    width: 100,
-    height: 100,
+    x: 0, // Centered and sized on image load
+    y: 0,
+    width: 0,
+    height: 0,
     scaleX: 1,
     scaleY: 1,
     rotation: 0,
@@ -51,14 +58,95 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
             scaleY: 1,
             rotation: 0,
         });
+        setShowUploadButton(false);
+        if (onImageUpdate) {
+          onImageUpdate(userImageDataUrl); // Notify parent about the loaded image
+        }
       };
-      img.onerror = () => { // Should not happen with data URLs, but good practice
+      img.onerror = () => {
         console.error("Failed to load user image from data URL.");
+        setUserImage(null); // Clear image on error
+        setShowUploadButton(true);
+        if (onImageUpdate) {
+          onImageUpdate(null); // Notify parent about the error/clear
+        }
       }
     } else {
       setUserImage(null);
+      setShowUploadButton(true); // Show button if image is cleared via prop
+      if (onImageUpdate) {
+        onImageUpdate(null); // Notify parent about the clear
+      }
     }
-  }, [userImageDataUrl, width, height]);
+  }, [userImageDataUrl, width, height, onImageUpdate]);
+
+
+  // This effect is primarily for when the image is cleared *not* via the userImageDataUrl prop,
+  // e.g. if we added a "clear" button inside ImageCanvas itself.
+  // Given current logic, it might be redundant if userImageDataUrl is the sole source of external clearing.
+  // However, it also handles the initial state where both userImageDataUrl and userImage are null.
+  useEffect(() => {
+    if (!userImage) { // If no image is displayed (either initially or cleared)
+      setShowUploadButton(true);
+    }
+  }, [userImage]);
+
+
+  const onImageSelected = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      const img = new window.Image();
+      img.src = dataUrl;
+      img.onload = () => {
+        setUserImage(img);
+        setUserImageProps({
+          x: (width - img.width / 4) / 2,
+          y: (height - img.height / 4) / 2,
+          width: img.width / 4,
+          height: img.height / 4,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+        });
+        setShowUploadButton(false); // Hide button on successful load
+        if (onImageUpdate) {
+          onImageUpdate(dataUrl); // Notify parent about the newly uploaded image
+        }
+      };
+      img.onerror = () => {
+        console.error("Failed to load user image from data URL after upload.");
+        // setUserImage(null); // Optionally clear, or leave old image
+        setShowUploadButton(true); // Re-show button on error
+        // Don't call onImageUpdate(null) here unless we clear the image,
+        // to avoid nullifying a previously valid image in parent state.
+      };
+    };
+    reader.onerror = () => {
+      console.error("Failed to read file.");
+      setShowUploadButton(true); // Re-show button on error
+    }
+    reader.readAsDataURL(file);
+  }, [width, height, onImageUpdate]);
+
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files.length > 0) {
+      onImageSelected(event.target.files[0]);
+      event.target.value = ''; // Reset file input
+    }
+  };
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: acceptedFiles => {
+      if (acceptedFiles && acceptedFiles.length > 0 && acceptedFiles[0]) {
+        onImageSelected(acceptedFiles[0]);
+      }
+    },
+    accept: {
+      'image/*': ['.jpeg', '.jpg', '.png', '.gif', '.webp'],
+    },
+    multiple: false,
+  });
 
   useEffect(() => {
     const img = new window.Image();
@@ -128,9 +216,11 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
   };
 
   return (
-    <div className="inline-block"> {/* Helps with sizing and centering if canvas is display:block by default */}
-      {overlayError && <p className="text-destructive text-center mb-2 p-2 bg-destructive/10 rounded-md">{overlayError}</p>}
-      <Stage width={width} height={height} ref={stageRef} className="bg-muted rounded-md border">
+    <div {...getRootProps()} style={{ position: 'relative', width, height, border: isDragActive ? '2px dashed #007bff' : '1px solid #e2e8f0' }} className="inline-block rounded-md align-middle"> {/* Added align-middle for better inline behavior if needed */}
+      <input {...getInputProps()} ref={uploadInputRef} style={{ display: 'none' }} onChange={handleFileInputChange} />
+      {overlayError && <p className="text-destructive text-center mb-2 p-2 bg-destructive/10 rounded-md absolute top-2 left-1/2 -translate-x-1/2 z-20">{overlayError}</p>}
+      {/* Removed border from Stage, parent div handles it now */}
+      <Stage width={width} height={height} ref={stageRef} className="bg-muted rounded-md">
         <Layer>
           {userImage && (
             <KonvaImage
@@ -174,6 +264,26 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
           )}
         </Layer>
       </Stage>
+      {showUploadButton && !userImage && (
+        <Button
+          onClick={() => uploadInputRef.current?.click()}
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 10, // Ensure it's above the canvas
+          }}
+          variant="outline"
+        >
+          Upload Image
+        </Button>
+      )}
+      {isDragActive && (
+        <div style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9, borderRadius: 'inherit'}}>
+            <p style={{color: 'white', fontSize: '1.5em', textAlign: 'center'}}>Drop the image here ...</p>
+        </div>
+      )}
     </div>
   );
 };

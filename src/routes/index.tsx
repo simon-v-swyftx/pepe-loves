@@ -1,7 +1,7 @@
 import React, { useState } from 'react'; // इंश्योर React is imported
 import { createFileRoute } from '@tanstack/react-router';
 import ThemeToggle from '~/components/ThemeToggle';
-import ImageUploader from '~/components/ImageUploader';
+// import ImageUploader from '~/components/ImageUploader'; // Removed
 import ImageCanvas from '~/components/ImageCanvas';
 import { Button } from '~/components/ui/button';
 import Konva from 'konva';
@@ -55,15 +55,16 @@ function Home() {
           Upload an image, then drag and resize it under the overlay.
         </p>
 
-        <ImageUploader onImageUpload={handleImageUpload} />
+        {/* <ImageUploader onImageUpload={handleImageUpload} /> Removed */}
 
         <div className="mt-6 w-full max-w-full overflow-x-auto">
           <div className="w-fit mx-auto shadow-lg rounded-md overflow-hidden border border-border"> {/* Added border here too */}
             <ImageCanvas
-              userImageDataUrl={userImageDataUrl}
+              // userImageDataUrl={userImageDataUrl} // Removed, ImageCanvas handles its own image state via uploader
+              onImageUpdate={handleImageUpload} // Renamed prop to pass callback
               width={CANVAS_WIDTH}
               height={CANVAS_HEIGHT}
-              overlayImageUrl="/overlay.png"
+              // overlayImageUrl="/overlay.png" // Removed, uses default from ImageCanvas
               onStageRef={setStageInstance}
             />
           </div>
