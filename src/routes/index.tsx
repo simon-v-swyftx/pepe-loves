@@ -1,10 +1,12 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import ThemeToggle from "~/components/ThemeToggle";
-import { Button } from "~/components/ui/button";
-import authClient from "~/lib/auth/auth-client";
+import React, { useState } from 'react'; // इंश्योर React is imported
+import { createFileRoute } from '@tanstack/react-router';
+import ThemeToggle from '~/components/ThemeToggle';
+import ImageUploader from '~/components/ImageUploader';
+import ImageCanvas from '~/components/ImageCanvas';
+import { Button } from '~/components/ui/button';
+import Konva from 'konva';
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute('/')({
   component: Home,
   loader: ({ context }) => {
     return { user: context.user };
@@ -12,68 +14,79 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const { user } = Route.useLoaderData();
-  const queryClient = useQueryClient();
-  const router = useRouter();
+  const [userImageDataUrl, setUserImageDataUrl] = useState<string | null>(null);
+  const [stageInstance, setStageInstance] = useState<Konva.Stage | null>(null);
+  const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
+
+  const CANVAS_WIDTH = 800;
+  const CANVAS_HEIGHT = 600;
+
+  const handleImageUpload = (dataUrl: string | null) => {
+    setUserImageDataUrl(dataUrl);
+    setDownloadMessage(null);
+  };
+
+  const handleDownload = () => {
+    if (stageInstance && userImageDataUrl) {
+      const dataURL = stageInstance.toDataURL({
+        mimeType: 'image/png',
+        quality: 0.9,
+        pixelRatio: 2,
+      });
+      const link = document.createElement('a');
+      link.download = 'superimposed-image.png';
+      link.href = dataURL;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setDownloadMessage('Image downloaded successfully!'); // Success message
+    } else {
+      console.warn('Download attempted but stage or user image is not available.');
+      setDownloadMessage('Download failed: Please upload an image first.');
+    }
+  };
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-10 p-2">
-      <div className="flex flex-col items-center gap-4">
-        <h1 className="text-3xl font-bold sm:text-4xl">React TanStarter</h1>
-        <div className="flex items-center gap-2 max-sm:flex-col">
-          This is an unprotected page:
-          <pre className="bg-card text-card-foreground rounded-md border p-1">
-            routes/index.tsx
-          </pre>
-        </div>
-      </div>
+    <div className="flex min-h-svh flex-col items-center justify-start gap-6 p-4 sm:p-6 md:p-10">
+      <div className="w-full max-w-4xl flex flex-col items-center gap-6">
+        <h1 className="text-3xl font-bold sm:text-4xl text-center">Image Superimposer</h1>
 
-      {user ? (
-        <div className="flex flex-col items-center gap-2">
-          <p>Welcome back, {user.name}!</p>
-          <Button type="button" asChild className="mb-2 w-fit" size="lg">
-            <Link to="/dashboard">Go to Dashboard</Link>
-          </Button>
-          <div className="text-center text-xs sm:text-sm">
-            Session user:
-            <pre className="max-w-screen overflow-x-auto px-2 text-start">
-              {JSON.stringify(user, null, 2)}
-            </pre>
+        <p className="text-muted-foreground text-center">
+          Upload an image, then drag and resize it under the overlay.
+        </p>
+
+        <ImageUploader onImageUpload={handleImageUpload} />
+
+        <div className="mt-6 w-full max-w-full overflow-x-auto">
+          <div className="w-fit mx-auto shadow-lg rounded-md overflow-hidden border border-border"> {/* Added border here too */}
+            <ImageCanvas
+              userImageDataUrl={userImageDataUrl}
+              width={CANVAS_WIDTH}
+              height={CANVAS_HEIGHT}
+              overlayImageUrl="/overlay.png"
+              onStageRef={setStageInstance}
+            />
           </div>
-
-          <Button
-            onClick={async () => {
-              await authClient.signOut();
-              await queryClient.invalidateQueries({ queryKey: ["user"] });
-              await router.invalidate();
-            }}
-            type="button"
-            className="w-fit"
-            variant="destructive"
-            size="lg"
-          >
-            Sign out
-          </Button>
         </div>
-      ) : (
-        <div className="flex flex-col items-center gap-2">
-          <p>You are not signed in.</p>
-          <Button type="button" asChild className="w-fit" size="lg">
-            <Link to="/login">Log in</Link>
-          </Button>
-        </div>
-      )}
 
-      <div className="flex flex-col items-center gap-2">
-        <ThemeToggle />
-        <a
-          className="text-muted-foreground hover:text-foreground underline"
-          href="https://github.com/dotnize/react-tanstarter"
-          target="_blank"
-          rel="noreferrer noopener"
+        <Button
+          onClick={handleDownload}
+          disabled={!userImageDataUrl || !stageInstance}
+          className="mt-8"
+          size="lg"
+          variant="default"
         >
-          dotnize/react-tanstarter
-        </a>
+          Download Image
+        </Button>
+        {downloadMessage && (
+          <p className={`mt-2 text-sm ${downloadMessage.startsWith('Download failed') ? 'text-destructive' : 'text-green-600'}`}>
+            {downloadMessage}
+          </p>
+        )}
+
+      </div>
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
       </div>
     </div>
   );
