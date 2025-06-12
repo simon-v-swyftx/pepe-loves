@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Stage, Layer, Image as KonvaImage, Transformer } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Transformer, Group } from 'react-konva';
 import Konva from 'konva';
 import { useDropzone } from 'react-dropzone';
 import { Button } from '~/components/ui/button';
@@ -26,6 +26,9 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
   const [showUploadButton, setShowUploadButton] = useState(true); // Added state
   const [overlayImage, setOverlayImage] = useState<HTMLImageElement | null>(null);
   const [overlayError, setOverlayError] = useState<string | null>(null);
+  const [scaledHeartPath, setScaledHeartPath] = useState<string | null>(null);
+
+  const originalHeartPathData = "M256,230 C220,200 180,220 180,256 C180,290 256,320 256,340 C256,320 332,290 332,256 C332,220 292,200 256,230 Z";
 
   const userImageRef = useRef<Konva.Image>(null);
   const overlayImageRef = useRef<Konva.Image>(null);
@@ -179,6 +182,61 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
     };
   }, [onStageRef, stageRef]);
 
+  // Helper function to scale SVG path data
+  const scaleSvgPath = (pathData: string, scaleX: number, scaleY: number): string => {
+    if (!pathData) return "";
+
+    // Regex to find SVG commands and their coordinates
+    // It captures the command (M, L, C, Z, etc.) and the sequence of numbers that follows.
+    const commandRegex = /([MLCVZ])([^MLCVZ]*)/gi;
+    let newPathData = "";
+    let match;
+
+    while ((match = commandRegex.exec(pathData)) !== null) {
+      const command = match[1];
+      const coordsString = match[2].trim();
+
+      newPathData += command;
+
+      if (coordsString) {
+        // Split coordinates string into individual numbers
+        const coords = coordsString.split(/[ ,]+/).map(Number);
+        const scaledCoords: number[] = [];
+
+        // Scale coordinates: X by scaleX, Y by scaleY
+        // This assumes alternating X, Y coordinates for commands like M, L, C.
+        // For 'Z' (closePath), there are no coordinates.
+        if (command.toUpperCase() !== 'Z') {
+          for (let i = 0; i < coords.length; i++) {
+            // Ensure the coordinate is a number before scaling
+            if (!isNaN(coords[i])) {
+              scaledCoords.push(i % 2 === 0 ? coords[i] * scaleX : coords[i] * scaleY);
+            }
+          }
+          newPathData += scaledCoords.join(',');
+        }
+      }
+      newPathData += " "; // Add space between commands for readability, though not strictly necessary for SVG
+    }
+    return newPathData.trim();
+  };
+
+  useEffect(() => {
+    if (overlayImage && overlayImage.naturalWidth > 0 && overlayImage.naturalHeight > 0 && originalHeartPathData) {
+      const imgNaturalWidth = overlayImage.naturalWidth;
+      const imgNaturalHeight = overlayImage.naturalHeight;
+
+      const currentScaleX = width / imgNaturalWidth;
+      const currentScaleY = height / imgNaturalHeight;
+
+      const newScaledPath = scaleSvgPath(originalHeartPathData, currentScaleX, currentScaleY);
+      setScaledHeartPath(newScaledPath);
+    } else {
+      // Reset or clear path if overlay image is not ready
+      setScaledHeartPath(null);
+    }
+  }, [width, height, overlayImage, originalHeartPathData]); // Added originalHeartPathData to dependencies
+
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     setUserImageProps(prev => ({
@@ -222,10 +280,25 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
       {/* Removed border from Stage, parent div handles it now */}
       <Stage width={width} height={height} ref={stageRef} className="bg-muted rounded-md">
         <Layer>
-          {userImage && (
-            <KonvaImage
-              ref={userImageRef}
-              image={userImage}
+          <Group
+            clipFunc={(ctx) => {
+              if (scaledHeartPath) {
+                // Ensure the context is clean before defining a new path
+                ctx.beginPath();
+                const path = new Path2D(scaledHeartPath);
+                // Konva's clipFunc expects the path to be set on the context
+                // and then the context itself acts as the clip.
+                // Using ctx.clip() is the standard way to apply the clipping region.
+                // For Path2D, you can directly use it with fill or stroke on the context
+                // if you were drawing, but for clipping, you define the path and then clip.
+                ctx.clip(path, "evenodd"); // "evenodd" is good for complex shapes, "nonzero" is default
+              }
+            }}
+          >
+            {userImage && (
+              <KonvaImage
+                ref={userImageRef}
+                image={userImage}
               x={userImageProps.x}
               y={userImageProps.y}
               width={userImageProps.width}
@@ -240,6 +313,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
               onTap={handleImageClick} // for touch
             />
           )}
+          </Group> {/* End of Konva.Group */}
           {userImage && <Transformer ref={transformerRef}
             boundBoxFunc={(oldBox, newBox) => {
               // limit resize
