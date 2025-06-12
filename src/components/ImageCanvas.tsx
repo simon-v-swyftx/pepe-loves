@@ -46,6 +46,35 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
     rotation: 0,
   });
 
+  // Updated: More specific, only deselects if the click is on the stage background
+  const handleStageClick = useCallback((e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    // If the click is on the stage itself (the background), and not on any shape.
+    if (transformerRef.current && e.target === stageRef.current) {
+      transformerRef.current.nodes([]);
+      transformerRef.current.getLayer()?.batchDraw();
+    }
+  }, []); // Refs are stable, so empty dependency array is fine.
+
+  // New: Handles clicks outside the Konva stage to deselect the transformer
+  const handleClickOutside = useCallback((event: MouseEvent) => {
+    if (
+      stageRef.current &&
+      transformerRef.current &&
+      transformerRef.current.nodes().length > 0 // Only if something is selected
+    ) {
+      const stageContainer = stageRef.current.container(); // DOM element of the stage
+      // Check if the click target is outside the stage container
+      if (stageContainer && !stageContainer.contains(event.target as Node)) {
+        transformerRef.current.nodes([]); // Deselect
+        const layer = transformerRef.current.getLayer();
+        if (layer) {
+          layer.batchDraw(); // Redraw the layer to hide transformer
+        }
+      }
+    }
+  }, []); // Refs are stable, empty dependency array.
+
+
   useEffect(() => {
     if (userImageDataUrl) {
       const img = new window.Image();
@@ -53,13 +82,13 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
       img.onload = () => {
         setUserImage(img);
         setUserImageProps({
-            x: (width - img.width / 4) / 2,
-            y: (height - img.height / 4) / 2,
-            width: img.width / 4,
-            height: img.height / 4,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
+          x: (width - img.width / 4) / 2,
+          y: (height - img.height / 4) / 2,
+          width: img.width / 4,
+          height: img.height / 4,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
         });
         setShowUploadButton(false);
         if (onImageUpdate) {
@@ -159,17 +188,42 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
       setOverlayError(null);
     };
     img.onerror = () => {
-        console.error("Failed to load overlay image from:", overlayImageUrl);
-        setOverlayError(`Failed to load overlay image. Ensure "${overlayImageUrl}" is in the public folder.`);
+      console.error("Failed to load overlay image from:", overlayImageUrl);
+      setOverlayError(`Failed to load overlay image. Ensure "${overlayImageUrl}" is in the public folder.`);
     }
   }, [overlayImageUrl]);
 
+  // Updated useEffect to manage transformer and both stage and document click listeners
   useEffect(() => {
-    if (userImage && userImageRef.current && transformerRef.current) {
-      transformerRef.current.nodes([userImageRef.current]);
-      transformerRef.current.getLayer()?.batchDraw();
+    const currentTransformer = transformerRef.current;
+    const currentStage = stageRef.current;
+    const currentImageNode = userImageRef.current;
+
+    // Manage Transformer nodes
+    if (userImage && currentImageNode && currentTransformer) {
+      // If image exists, ensure transformer is attached to it
+      const transformerNodes = currentTransformer.nodes();
+      if (transformerNodes.length !== 1 || transformerNodes[0] !== currentImageNode) {
+        currentTransformer.nodes([currentImageNode]);
+      }
+      currentTransformer.getLayer()?.batchDraw();
+    } else if (currentTransformer && currentTransformer.nodes().length > 0) {
+      // If no image (or image node not ready), or image cleared, detach transformer
+      currentTransformer.nodes([]);
+      currentTransformer.getLayer()?.batchDraw();
     }
-  }, [userImage, userImageProps]); // Depend on userImageProps to re-attach if image re-renders with new props
+
+    // Event listeners for deselection
+    if (currentStage) {
+      currentStage.on('click tap', handleStageClick); // For clicks on stage background
+      document.addEventListener('mousedown', handleClickOutside); // For clicks outside stage
+
+      return () => {
+        currentStage.off('click tap', handleStageClick);
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [userImage, userImageProps, handleStageClick, handleClickOutside]); // Added handleClickOutside to dependencies
 
   useEffect(() => {
     if (onStageRef) {
@@ -268,61 +322,52 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
 
   const handleImageClick = () => {
     if (userImageRef.current && transformerRef.current) {
-        transformerRef.current.nodes([userImageRef.current]);
-        transformerRef.current.getLayer()?.batchDraw();
+      transformerRef.current.nodes([userImageRef.current]);
+      transformerRef.current.getLayer()?.batchDraw();
     }
   };
 
   return (
-    <div {...getRootProps()} style={{ position: 'relative', width, height, border: isDragActive ? '2px dashed #007bff' : '1px solid #e2e8f0' }} className="inline-block rounded-md align-middle"> {/* Added align-middle for better inline behavior if needed */}
+    <div {...getRootProps()} style={{ position: 'relative', width, height, border: isDragActive ? '2px dashed #007bff' : '' }} className="inline-block rounded-md align-middle"> {/* Added align-middle for better inline behavior if needed */}
       <input {...getInputProps()} ref={uploadInputRef} style={{ display: 'none' }} onChange={handleFileInputChange} />
       {overlayError && <p className="text-destructive text-center mb-2 p-2 bg-destructive/10 rounded-md absolute top-2 left-1/2 -translate-x-1/2 z-20">{overlayError}</p>}
       {/* Removed border from Stage, parent div handles it now */}
       <Stage width={width} height={height} ref={stageRef} className="bg-muted rounded-md">
         <Layer>
           <Group
-            clipFunc={(ctx) => {
-              if (scaledHeartPath) {
-                // Ensure the context is clean before defining a new path
-                ctx.beginPath();
-                const path = new Path2D(scaledHeartPath);
-                // Konva's clipFunc expects the path to be set on the context
-                // and then the context itself acts as the clip.
-                // Using ctx.clip() is the standard way to apply the clipping region.
-                // For Path2D, you can directly use it with fill or stroke on the context
-                // if you were drawing, but for clipping, you define the path and then clip.
-                ctx.clip(path, "evenodd"); // "evenodd" is good for complex shapes, "nonzero" is default
-              }
-            }}
+          // clipFunc={(ctx) => {
+          //   // if (scaledHeartPath) {
+          //   //   // Ensure the context is clean before defining a new path
+          //   //   ctx.beginPath();
+          //   //   const path = new Path2D(scaledHeartPath);
+          //   //   // Konva's clipFunc expects the path to be set on the context
+          //   //   // and then the context itself acts as the clip.
+          //   //   // Using ctx.clip() is the standard way to apply the clipping region.
+          //   //   // For Path2D, you can directly use it with fill or stroke on the context
+          //   //   // if you were drawing, but for clipping, you define the path and then clip.
+          //   //   ctx.clip(path, "evenodd"); // "evenodd" is good for complex shapes, "nonzero" is default
+          //   // }
+          // }}
           >
             {userImage && (
               <KonvaImage
                 ref={userImageRef}
                 image={userImage}
-              x={userImageProps.x}
-              y={userImageProps.y}
-              width={userImageProps.width}
-              height={userImageProps.height}
-              scaleX={userImageProps.scaleX}
-              scaleY={userImageProps.scaleY}
-              rotation={userImageProps.rotation}
-              draggable
-              onDragEnd={handleDragEnd}
-              onTransformEnd={handleTransformEnd}
-              onClick={handleImageClick}
-              onTap={handleImageClick} // for touch
-            />
-          )}
-          </Group> {/* End of Konva.Group */}
-          {userImage && <Transformer ref={transformerRef}
-            boundBoxFunc={(oldBox, newBox) => {
-              // limit resize
-              if (newBox.width < 10 || newBox.height < 10) {
-                return oldBox;
-              }
-              return newBox;
-            }}
-          />}
+                x={userImageProps.x}
+                y={userImageProps.y}
+                width={userImageProps.width}
+                height={userImageProps.height}
+                scaleX={userImageProps.scaleX}
+                scaleY={userImageProps.scaleY}
+                rotation={userImageProps.rotation}
+                draggable
+                onDragEnd={handleDragEnd}
+                onTransformEnd={handleTransformEnd}
+                onClick={handleImageClick}
+                onTap={handleImageClick} // for touch
+              />
+            )}
+          </Group>
         </Layer>
         <Layer>
           {overlayImage && (
@@ -337,6 +382,18 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
             />
           )}
         </Layer>
+
+        <Layer>
+          {userImage && <Transformer ref={transformerRef}
+            boundBoxFunc={(oldBox, newBox) => {
+              // limit resize
+              if (newBox.width < 10 || newBox.height < 10) {
+                return oldBox;
+              }
+              return newBox;
+            }}
+          />}
+        </Layer>
       </Stage>
       {showUploadButton && !userImage && (
         <Button
@@ -344,7 +401,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
           style={{
             position: 'absolute',
             top: '50%',
-            left: '50%',
+            left: '25%',
             transform: 'translate(-50%, -50%)',
             zIndex: 10, // Ensure it's above the canvas
           }}
@@ -354,8 +411,8 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
         </Button>
       )}
       {isDragActive && (
-        <div style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9, borderRadius: 'inherit'}}>
-            <p style={{color: 'white', fontSize: '1.5em', textAlign: 'center'}}>Drop the image here ...</p>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9, borderRadius: 'inherit' }}>
+          <p style={{ color: 'white', fontSize: '1.5em', textAlign: 'center' }}>Drop the image here ...</p>
         </div>
       )}
     </div>

@@ -49,22 +49,17 @@ function Home() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-start gap-6 p-4 sm:p-6 md:p-10">
       <div className="w-full max-w-4xl flex flex-col items-center gap-6">
-        <h1 className="text-3xl font-bold sm:text-4xl text-center">Image Superimposer</h1>
-
-        <p className="text-muted-foreground text-center">
-          Upload an image, then drag and resize it under the overlay.
-        </p>
+        <h1 className="text-3xl font-bold sm:text-4xl text-center">Pepe Loves <b>You</b></h1>
 
         {/* <ImageUploader onImageUpload={handleImageUpload} /> Removed */}
 
         <div className="mt-6 w-full max-w-full overflow-x-auto">
           <div className="w-fit mx-auto shadow-lg rounded-md overflow-hidden border border-border"> {/* Added border here too */}
             <ImageCanvas
-              // userImageDataUrl={userImageDataUrl} // Removed, ImageCanvas handles its own image state via uploader
+              userImageDataUrl={null} 
               onImageUpdate={handleImageUpload} // Renamed prop to pass callback
               width={CANVAS_WIDTH}
               height={CANVAS_HEIGHT}
-              // overlayImageUrl="/overlay.png" // Removed, uses default from ImageCanvas
               onStageRef={setStageInstance}
             />
           </div>
