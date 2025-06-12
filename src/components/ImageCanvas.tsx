@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Stage, Layer, Image as KonvaImage, Transformer, Group } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Transformer, Group, Path as KonvaPath } from 'react-konva'; // Added KonvaPath
 import Konva from 'konva';
 import { useDropzone } from 'react-dropzone';
 import { Button } from '~/components/ui/button';
-// import { Label } from '~/components/ui/label'; // Not used yet
 
 interface ImageCanvasProps {
   userImageDataUrl: string | null; // Prop to initialize or externally set/clear the image
@@ -28,7 +27,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
   const [overlayError, setOverlayError] = useState<string | null>(null);
   const [scaledHeartPath, setScaledHeartPath] = useState<string | null>(null);
 
-  const originalHeartPathData = "M256,230 C220,200 180,220 180,256 C180,290 256,320 256,340 C256,320 332,290 332,256 C332,220 292,200 256,230 Z";
+  const originalHeartPathData = "M 101.00,433.00 C 104.35,427.50 100.45,428.47 100.44,423.00 100.44,418.82 103.35,416.49 100.44,407.00 97.92,398.85 91.56,392.23 90.76,389.00 90.17,387.15 90.97,381.56 90.76,379.00 91.03,376.30 91.13,371.51 90.76,369.00 88.92,360.47 80.71,349.65 74.00,344.39 68.13,339.78 63.41,340.14 60.58,336.73 58.13,333.76 56.95,323.65 51.87,319.43 46.42,314.90 41.64,319.13 38.53,314.71 38.53,314.71 31.55,298.00 31.55,298.00 31.55,298.00 21.97,274.00 21.97,274.00 21.97,274.00 8.92,239.00 8.92,239.00 6.62,230.28 6.90,221.92 7.00,213.00 7.00,213.00 8.72,198.00 8.72,198.00 9.43,192.02 8.37,189.58 9.89,183.00 11.23,177.17 12.09,176.94 13.96,171.99 19.10,158.44 18.38,159.60 25.86,147.00 27.86,143.62 29.58,140.29 32.04,137.17 32.04,137.17 38.54,129.99 38.54,129.99 44.63,122.56 44.41,118.71 53.00,112.25 61.55,105.82 83.28,97.69 94.00,96.14 94.00,96.14 107.00,96.14 107.00,96.14 111.40,96.02 126.37,97.14 130.00,98.61 137.98,101.85 146.91,111.74 151.38,119.00 156.35,127.07 162.45,145.04 171.18,148.90 177.24,151.58 181.43,144.88 189.00,142.63 195.40,140.73 222.13,140.01 230.00,140.00 244.38,139.98 275.65,142.48 288.00,149.04 307.98,159.66 318.44,173.80 329.42,193.00 329.42,193.00 343.76,220.00 343.76,220.00 347.04,229.08 348.60,241.37 349.04,251.00 349.04,251.00 350.00,265.00 350.00,265.00 349.86,276.92 346.16,291.36 340.97,302.00 340.97,302.00 330.65,326.00 330.65,326.00 329.21,329.34 327.63,334.85 324.73,336.99 314.86,344.28 309.35,330.66 303.72,325.32 300.39,322.18 294.09,318.61 290.00,316.28 282.69,312.11 266.47,301.35 260.00,299.22 253.30,297.01 248.78,296.30 243.21,301.48 238.43,305.91 237.77,311.46 236.07,313.42 234.63,315.08 232.88,315.04 230.04,317.31 230.04,317.31 219.70,326.27 219.70,326.27 218.15,328.17 216.46,333.34 215.14,336.00 215.14,336.00 210.54,346.00 210.54,346.00 208.05,353.13 203.61,378.21 203.21,386.00 202.63,397.08 209.50,407.69 207.00,418.00 207.00,418.00 218.00,425.00 218.00,425.00 218.00,425.00 218.00,427.00 218.00,427.00 218.00,427.00 208.00,433.09 208.00,433.09 208.00,433.09 187.00,440.35 187.00,440.35 177.80,443.43 178.35,444.98 168.00,445.00 168.00,445.00 139.00,445.00 139.00,445.00 139.00,445.00 121.00,445.00 121.00,445.00 118.00,445.00 113.67,445.33 111.00,443.98 107.22,442.06 103.35,436.51 101.00,433.00 Z";
 
   const userImageRef = useRef<Konva.Image>(null);
   const overlayImageRef = useRef<Konva.Image>(null);
@@ -335,19 +334,46 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({
       <Stage width={width} height={height} ref={stageRef} className="bg-muted rounded-md">
         <Layer>
           <Group
-          // clipFunc={(ctx) => {
-          //   // if (scaledHeartPath) {
-          //   //   // Ensure the context is clean before defining a new path
-          //   //   ctx.beginPath();
-          //   //   const path = new Path2D(scaledHeartPath);
-          //   //   // Konva's clipFunc expects the path to be set on the context
-          //   //   // and then the context itself acts as the clip.
-          //   //   // Using ctx.clip() is the standard way to apply the clipping region.
-          //   //   // For Path2D, you can directly use it with fill or stroke on the context
-          //   //   // if you were drawing, but for clipping, you define the path and then clip.
-          //   //   ctx.clip(path, "evenodd"); // "evenodd" is good for complex shapes, "nonzero" is default
-          //   // }
-          // }}
+            clipFunc={(ctx) => {
+              if (scaledHeartPath) {
+                ctx.beginPath(); // Essential to start a new path definition
+                const commandRegex = /([MLCVZ])([^MLCVZ]*)/gi;
+                let match;
+
+                // Parse the scaledHeartPath (SVG path string) and apply to context
+                // Do all this bullshit because KonvaJS doesn't support 2DPaths natively
+                while ((match = commandRegex.exec(scaledHeartPath)) !== null) {
+                  const command = match[1];
+                  const coordsString = match[2].trim();
+                  const coords = coordsString.split(/[ ,]+/).map(s => parseFloat(s)).filter(n => !isNaN(n));
+
+                  switch (command) {
+                    case 'M': // moveTo(x, y)
+                      if (coords.length >= 2) {
+                        ctx.moveTo(coords[0], coords[1]);
+                        // Handle implicit lineto commands if M is followed by more coordinate pairs
+                        for (let i = 2; i + 1 < coords.length; i += 2) {
+                          ctx.lineTo(coords[i], coords[i+1]);
+                        }
+                      }
+                      break;
+                    case 'C': // bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y)
+                      // Handles multiple bezier segments if they are under one 'C' command in SVG string
+                      for (let i = 0; i + 5 < coords.length; i += 6) {
+                        ctx.bezierCurveTo(coords[i], coords[i+1], coords[i+2], coords[i+3], coords[i+4], coords[i+5]);
+                      }
+                      break;
+                    case 'Z': // closePath()
+                      ctx.closePath();
+                      break;
+                    default:
+                      // console.warn(`Unsupported SVG command '${command}' in clipFunc`);
+                  }
+                }
+                // After defining the path on the context (ctx.moveTo, etc.),
+                // Konva is expected to automatically call ctx.clip() with its default fill rule (usually nonzero).
+              }
+            }}
           >
             {userImage && (
               <KonvaImage
