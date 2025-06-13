@@ -10,6 +10,7 @@ export default defineConfig({
     }),
     tailwindcss(),
     tanstackStart({
+      target: "vercel",
       // https://react.dev/learn/react-compiler
       react: {
         babel: {
